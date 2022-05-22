@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  rabbit:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - 15672:15672
+
+  orchestra:
+    #container_name: server
+    image: 7574_tp2:latest
+    entrypoint: [ "python3",  "/src/main.py", "--role", "server"]
+    depends_on:
+      - rabbit
+    environment:
+      - POST_FILTER_REPLICAS=2
+      - PYTHONUNBUFFERED=1
+      - RABBIT_HOST=rabbit
+  mappers:
+    #container_name: server
+    image: 7574_tp2:latest
+    deploy:
+      replicas: 2
+    entrypoint: [ "python3",  "/src/main.py", "--role", "client" ]
+    depends_on:
+      - orchestra
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBIT_HOST=rabbit
