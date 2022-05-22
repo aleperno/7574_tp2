@@ -1,6 +1,7 @@
 import os
 from functools import partial
 from src.utils.connections import connect_retry
+from src.common.messagig import Message, MessageEnum
 
 RABBIT_HOST = os.environ.get('RABBIT_HOST', 'localhost')
 mapper_id = 0
@@ -17,6 +18,7 @@ class Puppet:
         self.queue_name = f'{self.name}'
         self.exchange_name = f'{self.name}_exchange'
         self.init_queue_name = f'{self.name}_init_queue'
+        self.identifier = None
 
     @property
     def input_queue_name(self):
@@ -46,16 +48,19 @@ class Puppet:
         self.channel.start_consuming()
         # From this point onwards we know the ID of the puppet
         print(f"{self.name} con id {self._id}")
+        self.identifier = f'{self.name}_{self._id}'
         self.channel.basic_consume(queue=self.input_queue_name, on_message_callback=self.consume, auto_ack=True)
         # Flag the puppeteer we're ready
         print("flagging we're ready")
-        self.channel.basic_publish(exchange='', routing_key='puppeteer', body=f'{self.name}_ready')
+        msg = Message(type=MessageEnum.CONTROL.value, src=self.name, src_id=self._id, payload='ready')
+        self.channel.basic_publish(exchange='', routing_key='puppeteer', body=msg.dump())
 
     def run(self):
         self.channel.start_consuming()
 
     def consume(self, ch, method, properties, body):
         print(f"[{self.name}_{self._id}] Received {body}")
+        return body
 
     def get_id_callback(self, ch, method, properties, body):
         self._id = int(body.decode())

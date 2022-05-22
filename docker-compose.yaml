@@ -6,25 +6,36 @@ services:
     container_name: rabbitmq
     ports:
       - 15672:15672
+    volumes:
+        - ./rabbit.cfg:/etc/rabbit/conf.d/10-defaults.conf
 
-  orchestra:
+  puppeteer:
     #container_name: server
     image: 7574_tp2:latest
-    entrypoint: [ "python3",  "/src/main.py", "--role", "server"]
+    entrypoint: [ "python3",  "/src/main.py", "--role", "puppeteer"]
     depends_on:
       - rabbit
     environment:
-      - POST_FILTER_REPLICAS=2
+      - POST_FILTER_REPLICAS=${POST_FILTER_REPLICAS}
+      - POST_AVG_REDUCERS=${POST_AVG_REDUCERS}
       - PYTHONUNBUFFERED=1
       - RABBIT_HOST=rabbit
-  mappers:
+  post_filter:
     #container_name: server
     image: 7574_tp2:latest
     deploy:
-      replicas: 2
-    entrypoint: [ "python3",  "/src/main.py", "--role", "client" ]
+      replicas: ${POST_FILTER_REPLICAS}
+    entrypoint: [ "python3",  "/src/main.py", "--role", "post_filter" ]
     depends_on:
-      - orchestra
+      - puppeteer
     environment:
       - PYTHONUNBUFFERED=1
       - RABBIT_HOST=rabbit
+  post_average_calculator:
+    image: 7574_tp2:latest
+    entrypoint: [ "python3",  "/src/main.py", "--role", "post_avg_calculator" ]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBIT_HOST=rabbit
+    volumes:
+      - ./results/:/tmp/results/
