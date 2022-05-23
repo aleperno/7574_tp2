@@ -8,7 +8,7 @@ docker-image:
 .PHONY: docker-image
 
 docker-compose-up: docker-image
-	docker-compose -f docker-compose.yaml --env-file .env up -d --build
+	docker-compose -f docker-compose.yaml --env-file local.env up -d --build
 .PHONY: docker-compose-up
 
 docker-compose-down:
