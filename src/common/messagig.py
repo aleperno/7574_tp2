@@ -6,6 +6,9 @@ from json import JSONDecodeError
 class MessageEnum(Enum):
     DATA = 'data'
     CONTROL = 'control'
+    READY = 'ready'
+    DONE = 'done'
+    EOF = 'eof'
 
 
 class MessageError(Exception):
@@ -31,7 +34,13 @@ class Message:
         return self.type == MessageEnum.DATA.value
 
     def data_ready(self):
-        return self.is_control and self.payload == 'ready'
+        return self.is_control and self.payload == MessageEnum.READY.value
+
+    def control_done(self):
+        return self.is_control and self.payload == MessageEnum.DONE.value
+
+    def eof(self):
+        return self.is_control and self.payload == MessageEnum.EOF.value
 
     @classmethod
     def from_bytes(cls, read: bytes):
@@ -42,8 +51,16 @@ class Message:
             raise MessageError
 
     @classmethod
+    def create_eof(cls):
+        return cls(type=MessageEnum.CONTROL.value, payload=MessageEnum.EOF.value)
+
+    @classmethod
     def create_data(cls, *args, **kwargs):
         return cls(type=MessageEnum.DATA.value, *args, **kwargs)
+
+    @classmethod
+    def create_done(cls, src=None, src_id=None):
+        return cls(src=src, src_id=src_id, type=MessageEnum.CONTROL.value, payload=MessageEnum.DONE.value)
 
     def dump(self):
         return json.dumps(self.__dict__)

@@ -12,8 +12,8 @@ docker-compose-up: docker-image
 .PHONY: docker-compose-up
 
 docker-compose-down:
-	docker-compose -f docker-compose.yaml stop -t 10
-	docker-compose -f docker-compose.yaml down --remove-orphans
+	docker-compose -f docker-compose.yaml --env-file local.env stop -t 10
+	docker-compose -f docker-compose.yaml --env-file local.env down --remove-orphans
 .PHONY: docker-compose-down
 
 docker-compose-logs:

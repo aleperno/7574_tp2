@@ -27,4 +27,4 @@ def workers_balancer(metric_id, worker_count):
     hash = sha1(metric_id).hexdigest()
     first_char = hash[0]  # Get the first char of the hash
     decimal_value = int(first_char, 16)  # Convert to decimal
-    return decimal_value // (16 // worker_count)
+    return int(decimal_value // (16 / worker_count))

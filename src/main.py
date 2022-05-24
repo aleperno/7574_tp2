@@ -1,10 +1,10 @@
 from argparse import ArgumentParser
-from src.orchestrator import main as orchestrator
-from src.mapper import main as mapper
 
 from src.common.puppet import PostFilter
 from src.common.puppeteer import Puppeteer
 from src.posts import PostAvgCalculator, PostFilter
+from src.comments import CommentFilter, StudentMemeCalculator
+from src.clients import PostClient, CommentClient
 import time
 
 ROLES_MAPPER = {
@@ -12,6 +12,10 @@ ROLES_MAPPER = {
     'post_filter': PostFilter,
     'post_avg_calculator': PostAvgCalculator,
     'post_filter': PostFilter,
+    'post_client': PostClient,
+    'comment_filter': CommentFilter,
+    'comment_client': CommentClient,
+    'student_meme_calculator': StudentMemeCalculator,
 }
 
 
@@ -25,24 +29,8 @@ def main():
     args = parse_args()
     print("arranco el main")
     x = ROLES_MAPPER[args.role]()
-    x.connect()
-    x.init()
-    x.run()
-    """
-    if args.role == 'server':
-        print("Arranco el orquestador")
-        #orchestrator()
-        x = Puppeteer()
-        x.connect()
-        x.init()
-        x.run()
-    else:
-        print("arranco un mapper")
-        #mapper()
-        x = PostFilter()
-        x.connect()
-        x.init()
-        x.run()
-    """
+    x.main_loop()
+    print("termino")
+
 if __name__ == '__main__':
     main()

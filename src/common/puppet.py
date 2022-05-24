@@ -47,13 +47,23 @@ class Puppet:
         print("Empiezo a consumir")
         self.channel.start_consuming()
         # From this point onwards we know the ID of the puppet
+        self._start_consuming()
+
+    def _start_consuming(self):
         print(f"{self.name} con id {self._id}")
         self.identifier = f'{self.name}_{self._id}'
         self.channel.basic_consume(queue=self.input_queue_name, on_message_callback=self.consume, auto_ack=True)
         # Flag the puppeteer we're ready
         print("flagging we're ready")
         msg = Message(type=MessageEnum.CONTROL.value, src=self.name, src_id=self._id, payload='ready')
-        self.channel.basic_publish(exchange='', routing_key='puppeteer', body=msg.dump())
+        self.notify_puppeteer(body=msg.dump())
+
+    def notify_puppeteer(self, body):
+        self.channel.basic_publish(exchange='', routing_key='puppeteer', body=body)
+
+    def notify_done(self):
+        msg = Message.create_done(src=self.name, src_id=self._id)
+        self.notify_puppeteer(body=msg.dump())
 
     def run(self):
         self.channel.start_consuming()
@@ -68,6 +78,11 @@ class Puppet:
         ch.basic_ack(delivery_tag=method.delivery_tag)
         #ch.basic_publish(exchange='', routing_key='puppeteer', body=f'ok_{self._id}')
         ch.stop_consuming()
+
+    def main_loop(self):
+        self.connect()
+        self.init()
+        self.run()
 
 
 class PostFilter(Puppet):
