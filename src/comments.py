@@ -5,6 +5,7 @@ from src.utils import get_post_id
 from src.utils.balancer import workers_balancer
 from time import time
 from collections import defaultdict
+from copy import copy
 
 
 FILTER_MAPPING = {
@@ -29,6 +30,7 @@ class CommentFilter(Puppet):
         permalink = entry['permalink']
         comment = entry['body']
         sentiment = float(entry['sentiment'])
+        score = int(entry['score'])
 
         post_id = get_post_id(permalink)
 
@@ -36,7 +38,8 @@ class CommentFilter(Puppet):
             return {
                 'post_id': post_id,
                 'comment': comment,
-                'sentiment': sentiment
+                'sentiment': sentiment,
+                'score': score,
             }
 
     def consume(self, ch, method, properties, body):
@@ -84,10 +87,37 @@ class CommentFilter(Puppet):
 class StudentMemeCalculator(Puppet):
     name = 'student_meme_calculator'
 
+    """
+    self.data_mapping = {
+        <post_id>: {'meme_url': <url>, 'best_student_score': None}
+    }
+    """
+
     def __init__(self):
         super().__init__(mapped=True)
         self.start = None
         self.count = 0
+        self.data_mapping = {}
+        self.posts_score_average = None
 
     def consume(self, ch, method, properties, body):
-        pass
+        if not self.start:
+            self.start = time()
+        raw_data = body
+        message = Message.from_bytes(raw_data)
+        if message.is_data:
+            # Payload is in chunks
+            for data in message.payload:
+                if 'posts_score_average' in data:
+                    # It's the posts average
+                    assert not self.average
+                    self.average = data['posts_score_average']
+                    self.process_average()
+
+    def process_average(self):
+        dict_copy = copy(self.data_mapping)
+        for post_id, data in dict_copy.items():
+            best_than_avg = data.get('best_student_score', -1) > self.posts_score_average
+            has_meme_url = data.get('meme_url', False)
+            if best_than_avg and has_meme_url:
+                yield data

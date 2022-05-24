@@ -2,9 +2,11 @@ from time import sleep
 from collections import defaultdict
 from random import randint
 
+from src.constants import STUDENT_MEME_CALTULATOR_REPLICAS
 from src.common.puppet import Puppet
 from src.common.messagig import Message, MessageEnum
 from src.utils import transform_dataset
+from src.utils.balancer import workers_balancer
 from time import time
 
 FILTER_MAPPING = {
@@ -45,6 +47,9 @@ class PostFilter(Puppet):
 
             #data = transform_dataset(data=transformed, mapping=FILTER_MAPPING)
             #print(f"Recibi {message.payload} y envio {data}")
+            # Send to Student Meme Calculator
+            self.forward_to_students(transformed)
+            # Send tu Post AVG Calculator
             msg = Message.create_data(payload=transformed)
             self.forward_data(msg)
 
@@ -63,6 +68,22 @@ class PostFilter(Puppet):
         # la información que necesita saber
         self.channel.basic_publish(exchange='post_avg_calculator_exchange', routing_key='0',
                                    body=msg.dump())
+
+    def forward_to_students(self, data):
+        new_data = defaultdict(list)
+        for entry in data:
+            routing_key = str(workers_balancer(entry['post_id'], STUDENT_MEME_CALTULATOR_REPLICAS))
+            if int(routing_key) >= STUDENT_MEME_CALTULATOR_REPLICAS:
+                print(entry)
+                raise
+            new_data[routing_key].append(entry)
+        print(f"Enviando {len(data)} datos a {STUDENT_MEME_CALTULATOR_REPLICAS} replicas")
+        for routing_key, dataset in new_data.items():
+            msg = Message.create_data(payload=dataset)
+            self.channel.basic_publish(exchange='student_meme_calculator_exchange',
+                                       routing_key=routing_key,
+                                       body=msg.dump())
+            print(f"Envie {len(dataset)} a {routing_key}")
 
 
 class PostAvgCalculator(Puppet):
@@ -96,6 +117,17 @@ class PostAvgCalculator(Puppet):
             print(f"Resultado final {final_score_average}")
             # TODO: Ver donde devolver bien el resultado y ademas enviarlo al resto del
             # flujo del problema
+            self.forward_to_students(average=final_score_average)
+
             self.notify_done()
             end = time()
             print(f"Termine en {end - self.start} segundos")
+
+    def forward_to_students(self, average):
+        payload = {'posts_score_average': average}
+        for worker in range(STUDENT_MEME_CALTULATOR_REPLICAS):
+            print(f"Enviando average {worker} ")
+            msg = Message.create_data(payload=[payload])
+            self.channel.basic_publish(exchange='student_meme_calculator_exchange',
+                                       routing_key=str(worker),
+                                       body=msg.dump())

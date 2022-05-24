@@ -15,11 +15,14 @@ each key-value pair represents:
     value: Set of producers to be unlocked
 """
 CONSUMER_PRODUCER_MAPPING = {
-    PostAvgCalculator.name: (PostFilter.name, )
+    PostAvgCalculator.name: (PostFilter.name, ),
+    StudentMemeCalculator.name: (PostFilter.name, CommentFilter.name, PostAvgCalculator),
 }
 
 PRODUCER_CONSUMER_MAPPING = {
-    PostFilter.name: (PostAvgCalculator.name, )
+    PostFilter.name: (PostAvgCalculator.name, StudentMemeCalculator.name),
+    CommentFilter.name: (StudentMemeCalculator.name, ),
+    PostAvgCalculator.name: (StudentMemeCalculator.name, )
 }
 
 
@@ -125,6 +128,7 @@ class Puppeteer:
             # The sender completed it tasks
             data = self.control_pool[msg.src][msg.src_id]
             data['status'] = 'done'
+            print(f"Recibo que {msg.src}_{msg.src_id} termino")
             if data['mapped']:
                 # I can delete the input queue
                 print(f"Borro {data['queue_name']}")
@@ -133,21 +137,27 @@ class Puppeteer:
                 # Todos terminaron su tarea
                 # Algo seguro puedo hacer, borrar las queues de input?
                 # TODO: Quiza se pueda borrar el exchange?
+                print("terminaron todos")
                 for _id, worker_data in self.control_pool[msg.src].items():
                     queue_name = worker_data['queue_name']
-                    print(f'Boddo queue: {queue_name}')
+                    print(f'Borro queue: {queue_name}')
                     self.channel.queue_delete(queue=queue_name)
-                # Si tienen un consumer, les aviso que no hay mas data
+                # If they have consumers, we could tell them no more data is available
                 for consumer_name in PRODUCER_CONSUMER_MAPPING.get(msg.src, tuple()):
-                    for consumer_id, consumer_data in self.control_pool[consumer_name].items():
-                        msg = Message.create_eof().dump()
-                        kwargs = {
-                            'exchange': consumer_data['exchange'],
-                            'routing_key': consumer_data['routing_key'],
-                            'body': msg
-                        }
-                        print(f'Mando {kwargs}')
-                        self.channel.basic_publish(**kwargs)
+                    # However a consumer has multiple producers, therefore before telling them
+                    # there is no more data, we must validate all producers have ended
+                    for producer_name in CONSUMER_PRODUCER_MAPPING[consumer_name]:
+                        if all(data['status'] == 'done' for data in self.control_pool[producer_name].values()):
+                            print(f"Puedo borrar {consumer_name}")
+                            for consumer_id, consumer_data in self.control_pool[consumer_name].items():
+                                msg = Message.create_eof().dump()
+                                kwargs = {
+                                    'exchange': consumer_data['exchange'],
+                                    'routing_key': consumer_data['routing_key'],
+                                    'body': msg
+                                }
+                                print(f'Mando {kwargs}')
+                                self.channel.basic_publish(**kwargs)
 
         print(f"Este es mi control pool {self.control_pool}")
 
