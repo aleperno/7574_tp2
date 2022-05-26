@@ -64,6 +64,7 @@ class CommentFilter(Puppet):
 
             if data:
                 self.forward_to_students(data)
+                self.forward_to_sentiment_meme(data)
 
             print(f"Enviados {self.count}")
         elif message.eof():
@@ -89,6 +90,12 @@ class CommentFilter(Puppet):
                                        routing_key=routing_key,
                                        body=msg.dump())
             print(f"Envie {len(dataset)} a {routing_key}")
+
+    def forward_to_sentiment_meme(self, data):
+        msg = Message.create_data(payload=data)
+        self.channel.basic_publish(exchange='sentiment_calculator_exchange',
+                                   routing_key='0',
+                                   body=msg.dump())
 
 
 class StudentMemeCalculator(Puppet):
@@ -209,7 +216,7 @@ class StudentMemeCalculator(Puppet):
 
 
 class SentimentMeme(Puppet):
-    name = 'student_meme_calculator'
+    name = 'sentiment_calculator'
 
     """
     self.data_mapping = {
@@ -218,7 +225,7 @@ class SentimentMeme(Puppet):
     """
 
     def __init__(self):
-        super().__init__(mapped=True)
+        super().__init__(mapped=False)
         self.start = None
         self.count = 0
         self.data_mapping = defaultdict(dict)
@@ -273,10 +280,11 @@ class SentimentMeme(Puppet):
                 if not best_sentiment or sentiment_average > best_sentiment:
                     best_meme = meme_url
                     best_sentiment = sentiment_average
+        print(f"El resultado es {best_meme} con {best_sentiment}")
         self.send_result(best_meme)
 
     def send_result(self, meme):
-        msg = Message.create_data(payload=[meme])
+        msg = Message.create_data(payload=meme)
         self.channel.basic_publish(exchange=RESULTS_EXCHANGE,
                                    routing_key=RESULT_BEST_SENTIMENT_MEME_QUEUE,
                                    body=msg.dump())

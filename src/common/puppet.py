@@ -3,6 +3,7 @@ from functools import partial
 from src.utils.connections import connect_retry
 from src.common.messagig import Message, MessageEnum
 
+
 RABBIT_HOST = os.environ.get('RABBIT_HOST', 'localhost')
 mapper_id = 0
 

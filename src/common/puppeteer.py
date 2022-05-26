@@ -58,7 +58,7 @@ class Puppeteer:
 
         # From this point we will be defining all the other elements in our system
         # Define where the results will be stored at
-        self.create_result_sinks()
+        self.create_result_sinks(self.channel)
         # Define the Students Meme Analyzer
         self.init_puppet_pool(name=StudentMemeCalculator.name,
                               replicas=STUDENT_MEME_CALTULATOR_REPLICAS, notify=True, mapped=True)
@@ -178,7 +178,8 @@ class Puppeteer:
                         for consumer_id, consumer_data in self.control_pool[consumer_name].items():
                             self.notify_eof(exchange=consumer_data['exchange'],
                                             routing_key=consumer_data['routing_key'])
-
+        elif msg.eof():
+            self.channel.stop_consuming()
         print(f"Este es mi control pool {self.control_pool}")
 
     def notify_eof(self, exchange, routing_key):
@@ -200,11 +201,12 @@ class Puppeteer:
                 print(f"Publico un {i} en {init_queue_name}")
                 self.channel.basic_publish(exchange=exchange_name, routing_key=init_queue_name, body=str(i))
 
-    def create_result_sinks(self):
-        self.channel.exchange_declare(exchange='results', exchange_type='direct')
+    @staticmethod
+    def create_result_sinks(channel):
+        channel.exchange_declare(exchange='results', exchange_type='direct')
         for result_queue in RESULT_QUEUES:
-            self.channel.queue_declare(queue=result_queue)
-            self.channel.queue_bind(queue=result_queue, exchange='results', routing_key=result_queue)
+            channel.queue_declare(queue=result_queue)
+            channel.queue_bind(queue=result_queue, exchange='results', routing_key=result_queue)
 
     def main_loop(self):
         self.connect()

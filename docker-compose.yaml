@@ -80,3 +80,9 @@ services:
       - POSTS_FILE_CHUNK=10000
     volumes:
       - ./datasets/complete-comments.csv:/tmp/comments.csv
+  result_client:
+    image: 7574_tp2:latest
+    entrypoint: [ "python3",  "/src/main.py", "--role", "result_client" ]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBIT_HOST=rabbit

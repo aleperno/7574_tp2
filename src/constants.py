@@ -14,3 +14,4 @@ RESULTS_EXCHANGE = 'results'
 RESULT_POST_SCORE_AVG_QUEUE = 'posts_score_avg'
 RESULT_STUDENT_MEMES_QUEUE = 'student_memes'
 RESULT_BEST_SENTIMENT_MEME_QUEUE = 'best_sentiment_meme'
+MEME_RESULT_PATH = os.environ.get('MEME_RESULT_PATH', '/tmp')

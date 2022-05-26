@@ -52,6 +52,7 @@ class PostFilter(Puppet):
             #print(f"Recibi {message.payload} y envio {data}")
             # Send to Student Meme Calculator
             self.forward_to_students(transformed)
+            self.forward_to_sentiment_meme(transformed)
             # Send tu Post AVG Calculator
             msg = Message.create_data(payload=transformed)
             self.forward_data(msg)
@@ -87,6 +88,12 @@ class PostFilter(Puppet):
                                        routing_key=routing_key,
                                        body=msg.dump())
             print(f"Envie {len(dataset)} a {routing_key}")
+
+    def forward_to_sentiment_meme(self, data):
+        msg = Message.create_data(payload=data)
+        self.channel.basic_publish(exchange='sentiment_calculator_exchange',
+                                   routing_key='0',
+                                   body=msg.dump())
 
 
 class PostAvgCalculator(Puppet):
@@ -137,7 +144,7 @@ class PostAvgCalculator(Puppet):
 
     def send_to_results(self, average):
         payload = {'posts_score_average': average}
-        msg = Message.create_data(payload=[payload])
+        msg = Message.create_data(payload=payload)
         self.channel.basic_publish(exchange=RESULTS_EXCHANGE,
                                    routing_key=RESULT_POST_SCORE_AVG_QUEUE,
                                    body=msg.dump())
