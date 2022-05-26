@@ -1,10 +1,14 @@
 import pika
 import os
-from src.constants import (RABBIT_HOST, POST_FILTER_REPLICAS,
-                           STUDENT_MEME_CALTULATOR_REPLICAS)
+from src.constants import (RABBIT_HOST,
+                           POST_FILTER_REPLICAS,
+                           STUDENT_MEME_CALTULATOR_REPLICAS,
+                           RESULT_POST_SCORE_AVG_QUEUE,
+                           RESULT_STUDENT_MEMES_QUEUE,
+                           RESULT_BEST_SENTIMENT_MEME_QUEUE)
 from src.utils.connections import connect_retry
 from src.posts import PostAvgCalculator, PostFilter
-from src.comments import CommentFilter, StudentMemeCalculator
+from src.comments import CommentFilter, StudentMemeCalculator, SentimentMeme
 from src.common.messagig import Message
 from collections import defaultdict
 
@@ -14,16 +18,25 @@ each key-value pair represents:
     key: The Consumer that is ready to receive data
     value: Set of producers to be unlocked
 """
-CONSUMER_PRODUCER_MAPPING = {
-    PostAvgCalculator.name: (PostFilter.name, ),
-    StudentMemeCalculator.name: (PostFilter.name, CommentFilter.name, PostAvgCalculator),
-}
 
+RESULT_QUEUES = (RESULT_POST_SCORE_AVG_QUEUE, RESULT_STUDENT_MEMES_QUEUE, RESULT_BEST_SENTIMENT_MEME_QUEUE)
 PRODUCER_CONSUMER_MAPPING = {
-    PostFilter.name: (PostAvgCalculator.name, StudentMemeCalculator.name),
-    CommentFilter.name: (StudentMemeCalculator.name, ),
+    PostFilter.name: (PostAvgCalculator.name, StudentMemeCalculator.name, SentimentMeme.name),
+    CommentFilter.name: (StudentMemeCalculator.name, SentimentMeme.name),
     PostAvgCalculator.name: (StudentMemeCalculator.name, )
 }
+
+RESULTS_PRODUCERS = {
+    PostAvgCalculator.name: RESULT_POST_SCORE_AVG_QUEUE,
+    StudentMemeCalculator.name: RESULT_STUDENT_MEMES_QUEUE,
+    SentimentMeme.name: RESULT_BEST_SENTIMENT_MEME_QUEUE,
+}
+
+CONSUMER_PRODUCER_MAPPING = defaultdict(set)
+
+for producer, consumers in PRODUCER_CONSUMER_MAPPING.items():
+    for consumer in consumers:
+        CONSUMER_PRODUCER_MAPPING[consumer].add(producer)
 
 
 class Puppeteer:
@@ -44,8 +57,13 @@ class Puppeteer:
         self.channel.basic_consume(queue='puppeteer', on_message_callback=self.consume, auto_ack=True)
 
         # From this point we will be defining all the other elements in our system
+        # Define where the results will be stored at
+        self.create_result_sinks()
         # Define the Students Meme Analyzer
-        self.init_puppet_pool(name=StudentMemeCalculator.name, replicas=STUDENT_MEME_CALTULATOR_REPLICAS, notify=True, mapped=True)
+        self.init_puppet_pool(name=StudentMemeCalculator.name,
+                              replicas=STUDENT_MEME_CALTULATOR_REPLICAS, notify=True, mapped=True)
+        # Define Sentiment Meme Calculator
+        self.init_puppet_pool(name=SentimentMeme.name, notify=True)
         # Define Posts Average Calculator
         self.init_puppet_pool(name=PostAvgCalculator.name, replicas=1, notify=True)
         # Define Posts Filters
@@ -57,7 +75,7 @@ class Puppeteer:
     def run(self):
         self.channel.start_consuming()
 
-    def init_puppet_pool(self, name, replicas, mapped=False, notify=False):
+    def init_puppet_pool(self, name, replicas=1, mapped=False, notify=False):
         # Define exchange for the puppets
         exchange_name = f'{name}_exchange'
         init_queue_name = f'{name}_init_queue'
@@ -128,6 +146,7 @@ class Puppeteer:
             # The sender completed it tasks
             data = self.control_pool[msg.src][msg.src_id]
             data['status'] = 'done'
+            source = msg.src
             print(f"Recibo que {msg.src}_{msg.src_id} termino")
             if data['mapped']:
                 # I can delete the input queue
@@ -138,29 +157,41 @@ class Puppeteer:
                 # Algo seguro puedo hacer, borrar las queues de input?
                 # TODO: Quiza se pueda borrar el exchange?
                 print("terminaron todos")
+                self.channel.exchange_delete(exchange=f"{source}_exchange")
                 for _id, worker_data in self.control_pool[msg.src].items():
                     queue_name = worker_data['queue_name']
                     print(f'Borro queue: {queue_name}')
                     self.channel.queue_delete(queue=queue_name)
+                # If this source produced data for the results, we can send an eof to the results
+                # to mark its completion
+                result_queue = RESULTS_PRODUCERS.get(source)
+                if result_queue:
+                    self.notify_eof(exchange='results', routing_key=result_queue)
+
                 # If they have consumers, we could tell them no more data is available
-                for consumer_name in PRODUCER_CONSUMER_MAPPING.get(msg.src, tuple()):
+                for consumer_name in PRODUCER_CONSUMER_MAPPING.get(source, tuple()):
                     # However a consumer has multiple producers, therefore before telling them
                     # there is no more data, we must validate all producers have ended
-                    for producer_name in CONSUMER_PRODUCER_MAPPING[consumer_name]:
-                        if all(data['status'] == 'done' for data in self.control_pool[producer_name].values()):
-                            print(f"Puedo borrar {consumer_name}")
-                            for consumer_id, consumer_data in self.control_pool[consumer_name].items():
-                                msg = Message.create_eof().dump()
-                                kwargs = {
-                                    'exchange': consumer_data['exchange'],
-                                    'routing_key': consumer_data['routing_key'],
-                                    'body': msg
-                                }
-                                print(f'Mando {kwargs}')
-                                self.channel.basic_publish(**kwargs)
+                    all_producers_status = (data['status']=='done' for producer in CONSUMER_PRODUCER_MAPPING[consumer_name] for data in self.control_pool[producer].values())
+                    if all(all_producers_status):
+                        print(f"Puedo borrar {consumer_name}")
+                        for consumer_id, consumer_data in self.control_pool[consumer_name].items():
+                            self.notify_eof(exchange=consumer_data['exchange'],
+                                            routing_key=consumer_data['routing_key'])
 
         print(f"Este es mi control pool {self.control_pool}")
 
+    def notify_eof(self, exchange, routing_key):
+        msg = Message.create_eof().dump()
+        kwargs = {
+            'exchange': exchange,
+            'routing_key': routing_key,
+            'body': msg
+        }
+        print(f'Mando {kwargs}')
+        self.channel.basic_publish(**kwargs)
+
+    #TODO: Deprecate
     def unlock_producers(self, consumer):
         for producer_name in CONSUMER_PRODUCER_MAPPING[consumer]:
             exchange_name = f'{producer_name}_exchange'
@@ -168,6 +199,12 @@ class Puppeteer:
             for i in self.control_pool[producer_name].keys():
                 print(f"Publico un {i} en {init_queue_name}")
                 self.channel.basic_publish(exchange=exchange_name, routing_key=init_queue_name, body=str(i))
+
+    def create_result_sinks(self):
+        self.channel.exchange_declare(exchange='results', exchange_type='direct')
+        for result_queue in RESULT_QUEUES:
+            self.channel.queue_declare(queue=result_queue)
+            self.channel.queue_bind(queue=result_queue, exchange='results', routing_key=result_queue)
 
     def main_loop(self):
         self.connect()

@@ -2,7 +2,10 @@ from time import sleep
 from collections import defaultdict
 from random import randint
 
-from src.constants import STUDENT_MEME_CALTULATOR_REPLICAS
+from src.constants import (STUDENT_MEME_CALTULATOR_REPLICAS,
+                           RESULTS_EXCHANGE,
+                           RESULT_POST_SCORE_AVG_QUEUE,
+                           )
 from src.common.puppet import Puppet
 from src.common.messagig import Message, MessageEnum
 from src.utils import transform_dataset
@@ -118,7 +121,7 @@ class PostAvgCalculator(Puppet):
             # TODO: Ver donde devolver bien el resultado y ademas enviarlo al resto del
             # flujo del problema
             self.forward_to_students(average=final_score_average)
-
+            self.send_to_results(average=final_score_average)
             self.notify_done()
             end = time()
             print(f"Termine en {end - self.start} segundos")
@@ -131,3 +134,10 @@ class PostAvgCalculator(Puppet):
             self.channel.basic_publish(exchange='student_meme_calculator_exchange',
                                        routing_key=str(worker),
                                        body=msg.dump())
+
+    def send_to_results(self, average):
+        payload = {'posts_score_average': average}
+        msg = Message.create_data(payload=[payload])
+        self.channel.basic_publish(exchange=RESULTS_EXCHANGE,
+                                   routing_key=RESULT_POST_SCORE_AVG_QUEUE,
+                                   body=msg.dump())

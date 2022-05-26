@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from src.common.puppet import PostFilter
 from src.common.puppeteer import Puppeteer
 from src.posts import PostAvgCalculator, PostFilter
-from src.comments import CommentFilter, StudentMemeCalculator
+from src.comments import CommentFilter, StudentMemeCalculator, SentimentMeme
 from src.clients import PostClient, CommentClient
 import time
 
@@ -16,6 +16,7 @@ ROLES_MAPPER = {
     'comment_filter': CommentFilter,
     'comment_client': CommentClient,
     'student_meme_calculator': StudentMemeCalculator,
+    'sentiment_meme_calculator': SentimentMeme,
 }
 
 
