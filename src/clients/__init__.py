@@ -94,7 +94,7 @@ class ResultClient:
     def consume_post_avg(self, ch, method, properties, body):
         message = Message.from_bytes(body)
 
-        if message.is_data():
+        if message.is_data:
             print(f"Posts Average is {message.payload['posts_score_average']}")
         elif message.eof():
             self.results['post_avg'] = True
@@ -102,7 +102,7 @@ class ResultClient:
 
     def consume_student_meme(self, ch, method, properties, body):
         message = Message.from_bytes(body)
-        if message.is_data():
+        if message.is_data:
             for meme_url in message.payload:
                 print(f"Student Meme URL: {meme_url}")
         elif message.eof():
@@ -112,7 +112,7 @@ class ResultClient:
     def consume_sentiment_meme(self, ch, method, properties, body):
         message = Message.from_bytes(body)
 
-        if message.is_data():
+        if message.is_data:
             print(f"Best Sentiment Meme is {message.payload}")
         elif message.eof():
             self.results['sentiment_meme'] = True
@@ -144,3 +144,5 @@ class ResultClient:
         self.channel.basic_consume(queue=RESULT_POST_SCORE_AVG_QUEUE,
                                    on_message_callback=self.consume_post_avg,
                                    auto_ack=True)
+
+        self.channel.start_consuming()
