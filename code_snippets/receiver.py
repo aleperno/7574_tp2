@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 import pika
 import sys
+import os
+from src.utils.signals import register_handler, SigTermException
 
+register_handler()
 connection = pika.BlockingConnection(
     pika.ConnectionParameters(host='localhost'))
 channel = connection.channel()
@@ -19,5 +22,8 @@ def callback(ch, method, properties, body):
 
 channel.basic_consume(
     queue='testing', on_message_callback=callback, auto_ack=True)
-
-channel.start_consuming()
+print(f"Mi PID es {os.getpid()}")
+try:
+    channel.start_consuming()
+except SigTermException:
+    print("Recibi un sigterm")

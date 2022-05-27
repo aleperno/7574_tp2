@@ -25,7 +25,10 @@ channel = connection.channel()
 
 channel.queue_declare(queue='testing')
 
+CHUNKSIZE = 100000
+
 while True:
+    payload = [TEST_PAYLOAD for i in range(CHUNKSIZE)]
     msg = Message.create_data(payload=TEST_PAYLOAD)
     channel.basic_publish(
         exchange='',

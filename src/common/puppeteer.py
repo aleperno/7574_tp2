@@ -11,6 +11,7 @@ from src.posts import PostAvgCalculator, PostFilter
 from src.comments import CommentFilter, StudentMemeCalculator, SentimentMeme
 from src.common.messagig import Message
 from collections import defaultdict
+from src.utils.signals import register_handler, SigTermException
 
 """
 This mapping will serve to notify all producer when a consumer is ready to receive data,
@@ -103,11 +104,11 @@ class Puppeteer:
                 routing_key = str(i)
                 self.channel.queue_bind(queue=queue_name, exchange=exchange_name, routing_key=routing_key)
 
-            self.control_pool[name] = {i: {'status': 'init',
+            self.control_pool[name].update({i: {'status': 'init',
                                            'mapped': mapped,
                                            'exchange': exchange_name,
                                            'queue_name': queue_name,
-                                           'routing_key': routing_key}}
+                                           'routing_key': routing_key}})
 
             if notify:
                 # Send ID to the puppet channel so they can consume it and assign to themselves
@@ -140,7 +141,6 @@ class Puppeteer:
                 init_queue = f'{msg.src}_init_queue'
                 self.channel.queue_delete(queue=init_queue)
                 print(f"Removing queue {init_queue}")
-                #self.unlock_producers(consumer=msg.src)
                 pass
         elif msg.control_done():
             # The sender completed it tasks
@@ -179,6 +179,7 @@ class Puppeteer:
                             self.notify_eof(exchange=consumer_data['exchange'],
                                             routing_key=consumer_data['routing_key'])
         elif msg.eof():
+            self.delete_result_sinks()
             self.channel.stop_consuming()
         print(f"Este es mi control pool {self.control_pool}")
 
@@ -192,15 +193,6 @@ class Puppeteer:
         print(f'Mando {kwargs}')
         self.channel.basic_publish(**kwargs)
 
-    #TODO: Deprecate
-    def unlock_producers(self, consumer):
-        for producer_name in CONSUMER_PRODUCER_MAPPING[consumer]:
-            exchange_name = f'{producer_name}_exchange'
-            init_queue_name = f'{producer_name}_init_queue'
-            for i in self.control_pool[producer_name].keys():
-                print(f"Publico un {i} en {init_queue_name}")
-                self.channel.basic_publish(exchange=exchange_name, routing_key=init_queue_name, body=str(i))
-
     @staticmethod
     def create_result_sinks(channel):
         channel.exchange_declare(exchange='results', exchange_type='direct')
@@ -208,7 +200,27 @@ class Puppeteer:
             channel.queue_declare(queue=result_queue)
             channel.queue_bind(queue=result_queue, exchange='results', routing_key=result_queue)
 
+    def delete_result_sinks(self):
+        for result_queue in RESULT_QUEUES:
+            self.channel.queue_delete(queue=result_queue)
+
+        self.channel.exchange_delete(exchange='results')
+
+    def teardown(self):
+        for node_name, data in self.control_pool.items():
+            exchange = ''
+            for replica_n, config in data.items():
+                self.channel.queue_delete(queue=config['queue_name'])
+                exchange = config['exchange']
+            self.channel.exchange_delete(exchange=exchange)
+
     def main_loop(self):
         self.connect()
         self.init()
-        self.run()
+        register_handler()
+        try:
+            self.run()
+        except SigTermException:
+            self.teardown()
+            self.delete_result_sinks()
+        self.channel.close()

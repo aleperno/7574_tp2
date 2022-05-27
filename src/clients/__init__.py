@@ -15,6 +15,7 @@ from src.constants import (POSTS_FILE_PATH,
 
 from src.utils.connections import connect_retry
 from src.utils.csv import read_csv
+from src.utils.signals import register_handler, SigTermException
 from time import time
 
 
@@ -23,62 +24,75 @@ RESULT_QUEUES = (RESULT_BEST_SENTIMENT_MEME_QUEUE, RESULT_STUDENT_MEMES_QUEUE, R
 
 class PostClient:
     def main_loop(self):
+        register_handler()
         conn = connect_retry(host=RABBIT_HOST)
         channel = conn.channel()
-        channel.exchange_declare(exchange='post_filter_exchange', exchange_type='topic')
-        channel.queue_declare(queue='post_filter_input')
-        channel.queue_bind(exchange='post_filter_exchange', queue='post_filter_input', routing_key='0')
 
-        count = 0
-        start = time()
-        for chunk in read_csv(file_path=POSTS_FILE_PATH, chunksize=POSTS_FILE_CHUNK):
-            msg = Message.create_data(payload=chunk)
+        try:
+            channel.exchange_declare(exchange='post_filter_exchange', exchange_type='topic')
+            channel.queue_declare(queue='post_filter_input')
+            channel.queue_bind(exchange='post_filter_exchange', queue='post_filter_input', routing_key='0')
+
+            count = 0
+            start = time()
+            for chunk in read_csv(file_path=POSTS_FILE_PATH, chunksize=POSTS_FILE_CHUNK):
+                msg = Message.create_data(payload=chunk)
+                channel.basic_publish(
+                    exchange='post_filter_exchange',
+                    routing_key='0',
+                    body=msg.dump()
+                )
+                count += POSTS_FILE_CHUNK
+                print(f"Enviado: {count}")
+
+            end = time()
+            print(f"Terminado en {end-start} segundos")
+            msg = Message.create_eof()
             channel.basic_publish(
                 exchange='post_filter_exchange',
                 routing_key='0',
                 body=msg.dump()
             )
-            count += POSTS_FILE_CHUNK
-            print(f"Enviado: {count}")
-
-        end = time()
-        print(f"Terminado en {end-start} segundos")
-        msg = Message.create_eof()
-        channel.basic_publish(
-            exchange='post_filter_exchange',
-            routing_key='0',
-            body=msg.dump()
-        )
+        except SigTermException:
+            pass
+        finally:
+            channel.close()
 
 
 class CommentClient:
     def main_loop(self):
         conn = connect_retry(host=RABBIT_HOST)
         channel = conn.channel()
-        channel.exchange_declare(exchange='comment_filter_exchange', exchange_type='topic')
-        channel.queue_declare(queue='comment_filter_input')
-        channel.queue_bind(exchange='comment_filter_exchange', queue='comment_filter_input', routing_key='0')
+        register_handler()
+        try:
+            channel.exchange_declare(exchange='comment_filter_exchange', exchange_type='topic')
+            channel.queue_declare(queue='comment_filter_input')
+            channel.queue_bind(exchange='comment_filter_exchange', queue='comment_filter_input', routing_key='0')
 
-        count = 0
-        start = time()
-        for chunk in read_csv(file_path=COMMENT_FILE_PATH, chunksize=COMMENT_FILE_CHUNK):
-            msg = Message.create_data(payload=chunk)
+            count = 0
+            start = time()
+            for chunk in read_csv(file_path=COMMENT_FILE_PATH, chunksize=COMMENT_FILE_CHUNK):
+                msg = Message.create_data(payload=chunk)
+                channel.basic_publish(
+                    exchange='comment_filter_exchange',
+                    routing_key='0',
+                    body=msg.dump()
+                )
+                count += POSTS_FILE_CHUNK
+                print(f"Enviado: {count}")
+
+            end = time()
+            print(f"Terminado en {end-start} segundos")
+            msg = Message.create_eof()
             channel.basic_publish(
                 exchange='comment_filter_exchange',
                 routing_key='0',
                 body=msg.dump()
             )
-            count += POSTS_FILE_CHUNK
-            print(f"Enviado: {count}")
-
-        end = time()
-        print(f"Terminado en {end-start} segundos")
-        msg = Message.create_eof()
-        channel.basic_publish(
-            exchange='comment_filter_exchange',
-            routing_key='0',
-            body=msg.dump()
-        )
+        except SigTermException:
+            pass
+        finally:
+            channel.close()
 
 
 class ResultClient:
@@ -130,19 +144,24 @@ class ResultClient:
     def main_loop(self):
         conn = connect_retry(host=RABBIT_HOST)
         self.channel = conn.channel()
+        register_handler()
+        try:
+            Puppeteer.create_result_sinks(self.channel)
 
-        Puppeteer.create_result_sinks(self.channel)
+            self.channel.basic_consume(queue=RESULT_BEST_SENTIMENT_MEME_QUEUE,
+                                       on_message_callback=self.consume_sentiment_meme,
+                                       auto_ack=True)
 
-        self.channel.basic_consume(queue=RESULT_BEST_SENTIMENT_MEME_QUEUE,
-                                   on_message_callback=self.consume_sentiment_meme,
-                                   auto_ack=True)
+            self.channel.basic_consume(queue=RESULT_STUDENT_MEMES_QUEUE,
+                                       on_message_callback=self.consume_student_meme,
+                                       auto_ack=True)
 
-        self.channel.basic_consume(queue=RESULT_STUDENT_MEMES_QUEUE,
-                                   on_message_callback=self.consume_student_meme,
-                                   auto_ack=True)
+            self.channel.basic_consume(queue=RESULT_POST_SCORE_AVG_QUEUE,
+                                       on_message_callback=self.consume_post_avg,
+                                       auto_ack=True)
 
-        self.channel.basic_consume(queue=RESULT_POST_SCORE_AVG_QUEUE,
-                                   on_message_callback=self.consume_post_avg,
-                                   auto_ack=True)
-
-        self.channel.start_consuming()
+            self.channel.start_consuming()
+        except SigTermException:
+            pass
+        finally:
+            self.channel.close()

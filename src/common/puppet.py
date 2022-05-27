@@ -2,6 +2,7 @@ import os
 from functools import partial
 from src.utils.connections import connect_retry
 from src.common.messagig import Message, MessageEnum
+from src.utils.signals import register_handler, SigTermException
 
 
 RABBIT_HOST = os.environ.get('RABBIT_HOST', 'localhost')
@@ -81,9 +82,19 @@ class Puppet:
         ch.stop_consuming()
 
     def main_loop(self):
+        register_handler()
         self.connect()
         self.init()
-        self.run()
+        try:
+            self.run()
+        except SigTermException:
+            self.handle_sigterm()
+        self.channel.close()
+
+    def handle_sigterm(self):
+        # Does nothing, the destruction of the exchanges and the queues will be done by the
+        # pupetteer
+        pass
 
 
 class PostFilter(Puppet):
