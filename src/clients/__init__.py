@@ -7,6 +7,7 @@ from src.constants import (POSTS_FILE_PATH,
                            COMMENT_FILE_CHUNK,
                            COMMENT_FILE_PATH,
                            MEME_RESULT_PATH,
+                           MEME_RESULT_BUFFER,
                            RESULTS_EXCHANGE,
                            RESULT_POST_SCORE_AVG_QUEUE,
                            RESULT_STUDENT_MEMES_QUEUE,
@@ -16,6 +17,7 @@ from src.constants import (POSTS_FILE_PATH,
 from src.utils.connections import connect_retry
 from src.utils.csv import read_csv
 from src.utils.signals import register_handler, SigTermException
+from src.utils.downloader import download_and_store
 from time import time
 
 
@@ -133,6 +135,7 @@ class ResultClient(BaseClient):
         if message.is_data:
             for meme_url in message.payload:
                 print(f"Student Meme URL: {meme_url}")
+                download_and_store(url=meme_url, buffersize=MEME_RESULT_BUFFER)
         elif message.eof():
             self.results['student_memes'] = True
             self.check_end()
