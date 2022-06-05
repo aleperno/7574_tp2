@@ -49,7 +49,12 @@ class Puppeteer:
 
     def connect(self):
         self.conn = connect_retry(host=RABBIT_HOST)
-        self.channel = self.conn.channel()
+        if not self.conn:
+            print("Failed to connect")
+            return False
+        else:
+            self.channel = self.conn.channel()
+            return True
 
     def init(self):
         # Define queue to receive messages
@@ -215,7 +220,9 @@ class Puppeteer:
             self.channel.exchange_delete(exchange=exchange)
 
     def main_loop(self):
-        self.connect()
+        if not self.connect():
+            # The connection failed therefore we cannot continue with the execution
+            return
         self.init()
         register_handler()
         try:

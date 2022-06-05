@@ -34,8 +34,10 @@ class Puppet:
         self.conn = connect_retry(host=RABBIT_HOST)
         if not self.conn:
             print("Failed to connect")
+            return False
         else:
             self.channel = self.conn.channel()
+            return True
 
     def init(self):
         # Declare an exchange to be used to control the puppets.
@@ -83,7 +85,9 @@ class Puppet:
 
     def main_loop(self):
         register_handler()
-        self.connect()
+        if not self.connect():
+            # The connection failed therefore we cannot continue with the execution
+            return
         self.init()
         try:
             self.run()

@@ -1,9 +1,10 @@
 from retry import retry
+from pika.exceptions import AMQPConnectionError
 import pika
 
 
-@retry(pika.exceptions.AMQPConnectionError, delay=5, backoff=2, tries=5)
-def connect_retry(host):
+@retry(exceptions=AMQPConnectionError, delay=5, backoff=2, tries=5)
+def _connect_retry(host):
     """
     Connect to a rabbitmq with a retry mechanism
 
@@ -15,3 +16,10 @@ def connect_retry(host):
     the time before the next try.
     """
     return pika.BlockingConnection(pika.ConnectionParameters(host=host))
+
+
+def connect_retry(host):
+    try:
+        return _connect_retry(host)
+    except AMQPConnectionError:
+        return None

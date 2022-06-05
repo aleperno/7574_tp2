@@ -22,11 +22,27 @@ from time import time
 RESULT_QUEUES = (RESULT_BEST_SENTIMENT_MEME_QUEUE, RESULT_STUDENT_MEMES_QUEUE, RESULT_BEST_SENTIMENT_MEME_QUEUE)
 
 
-class PostClient:
+class BaseClient:
+    def __init__(self):
+        self.conn = None
+        self.channel = None
+
+    def _main_loop(self):
+        raise NotImplementedError
+
     def main_loop(self):
         register_handler()
-        conn = connect_retry(host=RABBIT_HOST)
-        channel = conn.channel()
+        self.conn = connect_retry(host=RABBIT_HOST)
+        if not self.conn:
+            print("Failed to setup connection")
+        else:
+            self.channel = self.conn.channel()
+            self._main_loop()
+
+
+class PostClient(BaseClient):
+    def _main_loop(self):
+        channel = self.channel
 
         try:
             channel.exchange_declare(exchange='post_filter_exchange', exchange_type='topic')
@@ -59,11 +75,10 @@ class PostClient:
             channel.close()
 
 
-class CommentClient:
-    def main_loop(self):
-        conn = connect_retry(host=RABBIT_HOST)
-        channel = conn.channel()
-        register_handler()
+class CommentClient(BaseClient):
+    def _main_loop(self):
+        channel = self.channel
+
         try:
             channel.exchange_declare(exchange='comment_filter_exchange', exchange_type='topic')
             channel.queue_declare(queue='comment_filter_input')
@@ -95,15 +110,14 @@ class CommentClient:
             channel.close()
 
 
-class ResultClient:
-
+class ResultClient(BaseClient):
     def __init__(self):
+        super().__init__()
         self.results = {
             'post_avg': False,
             'student_memes': False,
             'sentiment_meme': False
         }
-        self.channel = None
 
     def consume_post_avg(self, ch, method, properties, body):
         message = Message.from_bytes(body)
@@ -141,10 +155,7 @@ class ResultClient:
         msg = Message.create_eof()
         self.channel.basic_publish(exchange='', routing_key='puppeteer', body=msg.dump())
 
-    def main_loop(self):
-        conn = connect_retry(host=RABBIT_HOST)
-        self.channel = conn.channel()
-        register_handler()
+    def _main_loop(self):
         try:
             Puppeteer.create_result_sinks(self.channel)
 
