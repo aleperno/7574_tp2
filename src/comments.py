@@ -145,7 +145,6 @@ class StudentMemeCalculator(Puppet):
         for data in chunk:
             if 'posts_score_average' in data:
                 # It's the posts average
-                assert not self.posts_score_average
                 self.posts_score_average = data['posts_score_average']
                 print(list(self.data_mapping.items())[:10])
                 gen = self.process_average()
@@ -169,7 +168,6 @@ class StudentMemeCalculator(Puppet):
         post_score = data['post_score']
         comment_data = self.data_mapping[post_id]
 
-        assert not 'meme_url' in comment_data, f"Procesando {post_id} veo que ya existe la url"
         comment_data.update({'meme_url': meme_url, 'post_score': post_score})
         for meme in self.get_student_memes(post_id):
             yield meme
