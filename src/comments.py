@@ -43,6 +43,7 @@ class CommentFilter(Puppet):
 
         if comment not in DELETED_COMMENT and post_id:
             return {
+                'id': 'C',
                 'post_id': post_id,
                 'comment': comment,
                 'sentiment': sentiment,
@@ -143,17 +144,18 @@ class StudentMemeCalculator(Puppet):
 
     def process_chunk(self, chunk):
         for data in chunk:
-            if 'posts_score_average' in data:
+            id = data.get('id')
+            if id == 'P':
+                # Es informacion de un post
+                gen = self.process_post(data)
+            elif id == 'C':
+                # Es un comment
+                gen = self.process_comment(data)
+            elif id == 'AVG':
                 # It's the posts average
                 self.posts_score_average = data['posts_score_average']
                 print(list(self.data_mapping.items())[:10])
                 gen = self.process_average()
-            elif 'post_score' in data:
-                # Es informacion de un post
-                gen = self.process_post(data)
-            elif 'comment' in data:
-                # Es un comment
-                gen = self.process_comment(data)
 
             for meme in gen:
                 yield meme
@@ -249,11 +251,12 @@ class SentimentMeme(Puppet):
 
     def process_chunk(self, chunk):
         for data in chunk:
-            if 'meme_url' in data:
+            id = data.get('id')
+            if id == 'P':
                 meme_url = data['meme_url']
                 post_id = data['post_id']
                 self.data_mapping[post_id].update({'meme_url': meme_url})
-            elif 'comment' in data:
+            elif id == 'C':
                 post_id = data['post_id']
                 sentiment = float(data['sentiment'])
                 post_data = self.data_mapping[post_id]

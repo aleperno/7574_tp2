@@ -46,7 +46,7 @@ class PostFilter(Puppet):
         if message.is_data:
             self.count += len(message.payload)
 
-            transformed = [transform_dataset(data=entry, mapping=FILTER_MAPPING) for entry in message.payload]
+            transformed = [transform_dataset(data=entry, mapping=FILTER_MAPPING, update={'id': 'P'}) for entry in message.payload]
 
             #data = transform_dataset(data=transformed, mapping=FILTER_MAPPING)
             #print(f"Recibi {message.payload} y envio {data}")
@@ -134,7 +134,7 @@ class PostAvgCalculator(Puppet):
             print(f"Termine en {end - self.start} segundos")
 
     def forward_to_students(self, average):
-        payload = {'posts_score_average': average}
+        payload = {'posts_score_average': average, 'id': 'AVG'}
         for worker in range(STUDENT_MEME_CALTULATOR_REPLICAS):
             print(f"Enviando average {worker} ")
             msg = Message.create_data(payload=[payload])

@@ -4,13 +4,16 @@ import re
 POST_REGEX = "https?:\/\/(?P<url>.*)\/r\/(?P<subreddit>.*)\/comments\/(?P<post_id>.*?)\/"
 
 
-def transform_dataset(data, mapping):
+def transform_dataset(data, mapping, update=None):
     new_data = {}
     for key, value in data.items():
         if key in mapping:
             new_key = mapping[key]
             new_data[new_key] = value
 
+    if update:
+        new_data.update(update)
+        
     return new_data
 
 
