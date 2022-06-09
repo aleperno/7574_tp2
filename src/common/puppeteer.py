@@ -235,3 +235,4 @@ class Puppeteer:
             self.teardown()
             self.delete_result_sinks()
         self.channel.close()
+        self.conn.close()

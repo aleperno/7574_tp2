@@ -79,3 +79,4 @@ class ResultClient(BaseClient):
             pass
         finally:
             self.channel.close()
+            self.conn.close()

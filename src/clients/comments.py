@@ -39,3 +39,4 @@ class CommentClient(BaseClient):
             pass
         finally:
             channel.close()
+            self.conn.close()

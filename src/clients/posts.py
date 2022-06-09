@@ -39,3 +39,4 @@ class PostClient(BaseClient):
             pass
         finally:
             channel.close()
+            self.conn.close()

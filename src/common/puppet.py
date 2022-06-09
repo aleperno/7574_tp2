@@ -130,6 +130,7 @@ class Puppet:
             self.handle_sigterm()
         # Teardown
         self.channel.close()
+        self.conn.close()
 
     def handle_sigterm(self):
         # Does nothing, the destruction of the exchanges and the queues will be done by the
