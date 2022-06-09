@@ -5,7 +5,7 @@ from src.utils.signals import SigTermException
 from src.constants import (MEME_RESULT_BUFFER,)
 from src.common.puppeteer import Puppeteer
 
-from src.constants import (RESULT_POST_SCORE_AVG_QUEUE, RESULT_BEST_SENTIMENT_MEME_QUEUE, RESULT_STUDENT_MEMES_QUEUE)
+from src.constants import (RESULT_POST_SCORE_AVG_QUEUE, RESULT_BEST_SENTIMENT_MEME_QUEUE, RESULT_STUDENT_MEMES_QUEUE, MEME_RESULT_PATH)
 
 
 class ResultClient(BaseClient):
@@ -31,7 +31,6 @@ class ResultClient(BaseClient):
         if message.is_data:
             for meme_url in message.payload:
                 print(f"Student Meme URL: {meme_url}")
-                download_and_store(url=meme_url, buffersize=MEME_RESULT_BUFFER)
         elif message.eof():
             self.results['student_memes'] = True
             self.check_end()
@@ -40,7 +39,12 @@ class ResultClient(BaseClient):
         message = Message.from_bytes(body)
 
         if message.is_data:
-            print(f"Best Sentiment Meme is {message.payload}")
+            meme_url = message.payload
+            print(f"Best Sentiment Meme is {meme_url}")
+            print("Downloading meme")
+            download_and_store(url=meme_url,
+                               path=MEME_RESULT_PATH,
+                               buffersize=MEME_RESULT_BUFFER)
         elif message.eof():
             self.results['sentiment_meme'] = True
             self.check_end()

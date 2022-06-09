@@ -86,3 +86,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - RABBIT_HOST=rabbit
+      - MEME_RESULT_PATH=/tmp/results/
+      - MEME_RESULT_BUFFER=10000
+    volumes:
+      - ./results:/tmp/results

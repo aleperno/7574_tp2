@@ -25,10 +25,10 @@ class CommentClient(BaseClient):
                     body=msg.dump()
                 )
                 count += COMMENT_FILE_CHUNK
-                print(f"Enviado: {count}")
+                print(f"Sent: {count}")
 
             end = time()
-            print(f"Terminado en {end-start} segundos")
+            print(f"Finished in {end-start} seconds")
             msg = Message.create_eof()
             channel.basic_publish(
                 exchange='comment_filter_exchange',

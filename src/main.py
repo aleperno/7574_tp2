@@ -1,11 +1,9 @@
 from argparse import ArgumentParser
 
-from src.common.puppet import PostFilter
 from src.common.puppeteer import Puppeteer
 from src.posts import PostAvgCalculator, PostFilter
 from src.comments import CommentFilter, StudentMemeCalculator, SentimentMeme
 from src.clients import PostClient, CommentClient, ResultClient
-import time
 
 ROLES_MAPPER = {
     'puppeteer': Puppeteer,
@@ -29,10 +27,10 @@ def parse_args():
 
 def main():
     args = parse_args()
-    print("arranco el main")
+    print("Starting")
     x = ROLES_MAPPER[args.role]()
     x.main_loop()
-    print("termino")
+    print("Finalizing")
 
 if __name__ == '__main__':
     main()

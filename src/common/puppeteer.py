@@ -41,6 +41,11 @@ for producer, consumers in PRODUCER_CONSUMER_MAPPING.items():
 
 
 class Puppeteer:
+    """
+    Puppeteer Class
+
+    This will serve as an orchestrator of multiple elements in our program
+    """
     def __init__(self):
         self.conn = None
         self.channel = None
@@ -76,12 +81,19 @@ class Puppeteer:
         self.init_puppet_pool(name=PostFilter.name, replicas=POST_FILTER_REPLICAS, notify=True)
         # Define Comments Filters
         self.init_puppet_pool(name=CommentFilter.name, replicas=1, notify=True)
-        print(f"Este es mi control pool {self.control_pool}")
 
     def run(self):
         self.channel.start_consuming()
 
     def init_puppet_pool(self, name, replicas=1, mapped=False, notify=False):
+        """
+        Perform the setup of a pool of puppets
+
+        Args:
+            - name: The name of the puppet class
+            - replicas: The ammount of replicas that will be instanciated
+            - mapped (bool): Set to True if each replica will have its independent queue
+        """
         # Define exchange for the puppets
         exchange_name = f'{name}_exchange'
         init_queue_name = f'{name}_init_queue'
@@ -93,9 +105,7 @@ class Puppeteer:
         # For each replica, insert a message with the 'id' into the init queue
         # Also create the queue or queues for the given replicas, depending if they all consume from the same queue
         # or have independent queues
-        print(f"{name} has {replicas} replicas")
         for i in range(replicas):
-
             if not mapped and i==0:
                 # Must define the queue
                 queue_name = f'{name}_input'
@@ -117,31 +127,23 @@ class Puppeteer:
 
             if notify:
                 # Send ID to the puppet channel so they can consume it and assign to themselves
-                print(f"Publico un {i} en {init_queue_name}")
+                print(f"Sending {i} to {init_queue_name}")
                 self.channel.basic_publish(exchange=exchange_name, routing_key=init_queue_name, body=str(i))
 
-    def notify_ready(self, name, replicas):
-        """
-        Send an id to each of the replicas, this will flag the consumer they can start consuming
-        """
-        exchange_name = f'{name}_exchange'
-        init_queue_name = f'{name}_init_queue'
-        for i in range(replicas):
-            # Send ID to the puppet channel so they can consume it and assign to themselves
-            print(f"Publico un {i} en {init_queue_name}")
-            self.channel.basic_publish(exchange=exchange_name, routing_key=init_queue_name, body=str(i))
-
     def consume(self, ch, method, properties, body):
-        print("Puppeteer Orchestrator %r" % body)
+        """
+        Will consume from the input queue and process notifications from the puppets and clients
+        """
         msg = Message.from_bytes(body)
         if msg.data_ready():
             # The sender is ready to receive data
             if msg.src not in self.control_pool:
                 print(f"{msg.src} not found in control pool")
             else:
+                # Change the status in the control pool
                 self.control_pool[msg.src][msg.src_id]['status'] = 'ready'
             # Check if all replicas are ready to receive data
-            if all(data['status']=='ready' for data in self.control_pool[msg.src].values()):
+            if all(data['status'] == 'ready' for data in self.control_pool[msg.src].values()):
                 # If they are all ready I can delete the INIT queue
                 init_queue = f'{msg.src}_init_queue'
                 self.channel.queue_delete(queue=init_queue)
@@ -152,21 +154,26 @@ class Puppeteer:
             data = self.control_pool[msg.src][msg.src_id]
             data['status'] = 'done'
             source = msg.src
-            print(f"Recibo que {msg.src}_{msg.src_id} termino")
             if data['mapped']:
-                # I can delete the input queue
-                print(f"Borro {data['queue_name']}")
+                # Since the puppet is mapped (each instance has it's own queue), we can delete the
+                # input queue without checking the other instances status
+                print(f"Deleting {data['queue_name']}")
                 self.channel.queue_delete(queue=data['queue_name'])
             if all(data['status'] == 'done' for data in self.control_pool[msg.src].values()):
-                # Todos terminaron su tarea
-                # Algo seguro puedo hacer, borrar las queues de input?
-                # TODO: Quiza se pueda borrar el exchange?
-                print("terminaron todos")
+                # All instances finished their tasks
+                # Therefore we can delete the puppet exchange and data input queues
+
+                # Delete the exchange
                 self.channel.exchange_delete(exchange=f"{source}_exchange")
+
+                # Delete each of the queues of the instances
+                # If they're not mapped and all instances use the same queue, this doesn't
+                # fail since the removal of a queue is idempotent and doesnt raise any Exceptions
                 for _id, worker_data in self.control_pool[msg.src].items():
                     queue_name = worker_data['queue_name']
-                    print(f'Borro queue: {queue_name}')
+                    print(f'Deleting queue: {queue_name}')
                     self.channel.queue_delete(queue=queue_name)
+
                 # If this source produced data for the results, we can send an eof to the results
                 # to mark its completion
                 result_queue = RESULTS_PRODUCERS.get(source)
@@ -179,14 +186,12 @@ class Puppeteer:
                     # there is no more data, we must validate all producers have ended
                     all_producers_status = (data['status']=='done' for producer in CONSUMER_PRODUCER_MAPPING[consumer_name] for data in self.control_pool[producer].values())
                     if all(all_producers_status):
-                        print(f"Puedo borrar {consumer_name}")
                         for consumer_id, consumer_data in self.control_pool[consumer_name].items():
                             self.notify_eof(exchange=consumer_data['exchange'],
                                             routing_key=consumer_data['routing_key'])
         elif msg.eof():
             self.delete_result_sinks()
             self.channel.stop_consuming()
-        print(f"Este es mi control pool {self.control_pool}")
 
     def notify_eof(self, exchange, routing_key):
         msg = Message.create_eof().dump()
@@ -195,7 +200,6 @@ class Puppeteer:
             'routing_key': routing_key,
             'body': msg
         }
-        print(f'Mando {kwargs}')
         self.channel.basic_publish(**kwargs)
 
     @staticmethod
