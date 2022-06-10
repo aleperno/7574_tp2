@@ -76,8 +76,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - RABBIT_HOST=rabbit
-      - POSTS_FILE_PATH=/tmp/comments.csv
-      - POSTS_FILE_CHUNK=10000
+      - COMMENT_FILE_PATH=/tmp/comments.csv
+      - COMMENT_FILE_CHUNK=10000
     volumes:
       - ./datasets/complete-comments.csv:/tmp/comments.csv
   result_client:
